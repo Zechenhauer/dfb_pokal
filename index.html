@@ -49,7 +49,7 @@
 
             <!-- Admin Toggle -->
             <div>
-                <button onclick="toggleAdmin()" id="adminToggleBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition border border-gray-700 flex items-center gap-1.5">
+                <button onclick="requestAdminAccess()" id="adminToggleBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition border border-gray-700 flex items-center gap-1.5">
                     ⚙️ Admin-Modus
                 </button>
             </div>
@@ -292,6 +292,15 @@
                 `;
                 container.appendChild(card);
             });
+        }
+
+        function requestAdminAccess() {
+            const password = prompt("Bitte Admin-Passwort eingeben:");
+            if (password === "1919") {
+                toggleAdmin();
+            } else if (password !== null) {
+                alert("Falsches Passwort!");
+            }
         }
 
         function toggleAdmin() {
