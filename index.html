@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>DFB-Pokal 2026/27 – Live-Center</title>
+    <title>DFB-Pokal 2026/27 – Tippspiel & Live-Center</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Supabase JS SDK -->
@@ -38,6 +38,18 @@
                 </div>
             </div>
 
+            <!-- Aktiver Tipper Auswahl -->
+            <div class="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-xl border border-gray-800">
+                <span class="text-xs text-gray-400">Tippe als:</span>
+                <select id="currentPlayerSelect" onchange="changeCurrentPlayer(this.value)" class="bg-gray-900 text-white text-xs font-bold px-2 py-1 rounded border border-gray-700 focus:outline-none focus:border-bayernRed">
+                    <option value="Jürgen">Jürgen (Gold)</option>
+                    <option value="Kollege 1">Kollege 1 (Blau)</option>
+                    <option value="Kollege 2">Kollege 2 (Grün)</option>
+                    <option value="Kollege 3">Kollege 3 (Lila)</option>
+                    <option value="Kollege 4">Kollege 4 (Türkis)</option>
+                </select>
+            </div>
+
             <!-- Runden-Navigation -->
             <div class="flex flex-wrap gap-1.5 justify-center bg-black/30 p-1.5 rounded-xl border border-gray-800" id="roundNav">
                 <button onclick="changeRound(2)" class="round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-bayernRed text-white shadow" data-round="2">2. Hauptrunde</button>
@@ -62,13 +74,13 @@
         <!-- Runden-Titel -->
         <div class="mb-6 text-center">
             <h2 id="currentRoundTitle" class="text-2xl font-black tracking-wide text-bayernRed">2. Hauptrunde</h2>
-            <p class="text-xs text-gray-400 mt-1">Alle Begegnungen und Live-Spielstände im Überblick (Auto-Sync im Live-Modus)</p>
+            <p class="text-xs text-gray-400 mt-1">Live-Center & Kollegiales DFB-Pokal-Tippspiel</p>
         </div>
 
         <!-- Lade-Indikator -->
         <div id="loading" class="text-center py-20">
             <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-bayernRed border-t-transparent"></div>
-            <p class="text-gray-400 text-sm mt-3">Lade Pokal-Spiele...</p>
+            <p class="text-gray-400 text-sm mt-3">Lade Pokal-Spiele & Tipps...</p>
         </div>
 
         <!-- Spiele Container -->
@@ -78,6 +90,24 @@
 
     </main>
 
+    <!-- Tipp-Modal -->
+    <div id="tipModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-bayernCard border border-gray-700 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
+            <h3 class="font-bold text-lg text-white mb-2">🎯 Wer kommt weiter?</h3>
+            <p id="tipModalMatchTitle" class="text-xs text-gray-400 mb-6">Wähle deinen Favoriten:</p>
+            
+            <div class="grid grid-cols-2 gap-3 mb-6">
+                <button id="tipHomeBtn" onclick="submitTipSelection('home')" class="bg-gray-800 hover:bg-bayernRed text-white p-3 rounded-xl font-bold text-sm transition border border-gray-700 truncate">Heim</button>
+                <button id="tipAwayBtn" onclick="submitTipSelection('away')" class="bg-gray-800 hover:bg-bayernRed text-white p-3 rounded-xl font-bold text-sm transition border border-gray-700 truncate">Auswärts</button>
+            </div>
+
+            <div class="flex justify-between items-center">
+                <button onclick="clearTipForCurrentMatch()" class="text-xs text-red-400 hover:underline">Tipp löschen</button>
+                <button onclick="closeTipModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-lg text-xs font-bold transition">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Admin Modal -->
     <div id="adminModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
         <div class="bg-bayernCard border border-gray-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden">
@@ -86,11 +116,8 @@
                 <button onclick="toggleAdmin()" class="text-gray-400 hover:text-white text-xl">&times;</button>
             </div>
             <div class="p-6 max-h-[80vh] overflow-y-auto space-y-4">
-                <p class="text-xs text-gray-400">Wähle eine Partie aus, um den Spielstand oder Torschützen manuell zu korrigieren. Die Änderung wird sofort in Supabase gespeichert.</p>
-                
-                <div id="adminMatchList" class="space-y-3">
-                    <!-- Dynamische Admin-Einträge -->
-                </div>
+                <p class="text-xs text-gray-400">Wähle eine Partie aus, um den Spielstand oder Torschützen manuell zu korrigieren.</p>
+                <div id="adminMatchList" class="space-y-3"></div>
             </div>
             <div class="bg-gray-900 px-6 py-3 border-t border-gray-800 text-right">
                 <button onclick="toggleAdmin()" class="bg-bayernRed hover:bg-red-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition">Schließen</button>
@@ -100,16 +127,36 @@
 
     <!-- JavaScript Logik -->
     <script>
-        // Supabase Konfiguration
         const SUPABASE_URL = "https://lhusylpjnujlqomougmg.supabase.co";
         const SUPABASE_KEY = "sb_publishable_yXEueWILvAq-Vm2VfTuYyg_BIQeE1KK";
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
         let currentRound = 2;
         let matchesData = [];
+        let allTips = []; // Speichert alle Tipps aller Kollegen aus der DB
         let smartPollInterval = null;
+        let activeTipMatchId = null;
+        let activeTipTeams = { home: '', away: '' };
 
-        // Vordefinierter Spielplan für die 2. Hauptrunde
+        // Aktueller Spieler (im Browser gemerkt)
+        let currentPlayer = localStorage.getItem('dfb_pokal_current_player') || 'Jürgen';
+        document.getElementById('currentPlayerSelect').value = currentPlayer;
+
+        // Farbzuordnung für die Kollegen
+        const playerColors = {
+            'Jürgen': { bg: 'bg-amber-500/20', border: 'border-amber-500/60', text: 'text-amber-400', badge: 'bg-amber-500 text-black' },
+            'Kollege 1': { bg: 'bg-blue-500/20', border: 'border-blue-500/60', text: 'text-blue-400', badge: 'bg-blue-500 text-white' },
+            'Kollege 2': { bg: 'bg-emerald-500/20', border: 'border-emerald-500/60', text: 'text-emerald-400', badge: 'bg-emerald-500 text-black' },
+            'Kollege 3': { bg: 'bg-purple-500/20', border: 'border-purple-500/60', text: 'text-purple-400', badge: 'bg-purple-500 text-white' },
+            'Kollege 4': { bg: 'bg-cyan-500/20', border: 'border-cyan-500/60', text: 'text-cyan-400', badge: 'bg-cyan-500 text-black' }
+        };
+
+        function changeCurrentPlayer(name) {
+            currentPlayer = name;
+            localStorage.setItem('dfb_pokal_current_player', name);
+            renderMatches();
+        }
+
         const initialRound2Matches = [
             { id: "pokal_2_sg-sonnenhof-grossaspach_vs_fc-augsburg", home: "SG Sonnenhof Großaspach", away: "FC Augsburg", homeLeague: "Regionalliga Nord", awayLeague: "Bundesliga", date: "27.10.2026", time: "18:00" },
             { id: "pokal_2_rot-weiss-essen_vs_rb-leipzig", home: "Rot-Weiss Essen", away: "RB Leipzig", homeLeague: "3. Liga", awayLeague: "Bundesliga", date: "27.10.2026", time: "18:00" },
@@ -143,14 +190,14 @@
                 document.getElementById('matchesContainer').classList.add('hidden');
             }
 
-            const { data, error } = await supabaseClient
-                .from('dfb_pokal_spiele')
-                .select('*')
-                .eq('matchday', currentRound);
+            // Spiele und Tipps parallel aus Supabase laden
+            const [matchesRes, tipsRes] = await Promise.all([
+                supabaseClient.from('dfb_pokal_spiele').select('*').eq('matchday', currentRound),
+                supabaseClient.from('dfb_pokal_tipps').select('*')
+            ]);
 
-            if (error) {
-                console.error('Fehler beim Laden:', error);
-            }
+            const data = matchesRes.data;
+            allTips = tipsRes.data || [];
 
             let baseMatches = currentRound === 2 ? initialRound2Matches : [];
             
@@ -173,28 +220,6 @@
                 };
             });
 
-            if (data) {
-                data.forEach(dm => {
-                    if (!matchesData.some(m => m.match_id === dm.match_id)) {
-                        matchesData.push({
-                            match_id: dm.match_id,
-                            matchday: dm.matchday,
-                            home_team: dm.home_team,
-                            away_team: dm.away_team,
-                            home_league: "Unbekannt",
-                            away_league: "Unbekannt",
-                            home_score: dm.home_score,
-                            away_score: dm.away_score,
-                            goal_scorer: dm.goal_scorer,
-                            date: "Live",
-                            time: "",
-                            is_live: true,
-                            status: 'IN'
-                        });
-                    }
-                });
-            }
-
             renderMatches();
             renderAdminList();
             checkAndManagePolling();
@@ -207,11 +232,8 @@
 
         function checkAndManagePolling() {
             const hasLiveGames = matchesData.some(m => m.is_live || m.status === 'IN' || (m.home_score > 0 || m.away_score > 0));
-
             if (hasLiveGames && !smartPollInterval) {
-                smartPollInterval = setInterval(() => {
-                    init(true);
-                }, 30000);
+                smartPollInterval = setInterval(() => init(true), 30000);
             } else if (!hasLiveGames && smartPollInterval) {
                 clearInterval(smartPollInterval);
                 smartPollInterval = null;
@@ -244,17 +266,24 @@
                 const isBayern = match.home_team.includes('Bayern') || match.away_team.includes('Bayern');
                 const cardBorder = isBayern ? 'border-bayernRed/50 bg-gradient-to-r from-bayernCard via-bayernCard to-red-950/20' : 'border-gray-800 bg-bayernCard';
                 const scorersText = match.goal_scorer && match.goal_scorer !== 'EMPTY' ? match.goal_scorer : '';
-
                 const isLive = match.is_live || match.status === 'IN' || (match.home_score > 0 || match.away_score > 0);
 
-                // Bestimmung des Siegers (nur bei Toren ungleich)
-                const hasScore = match.home_score > 0 || match.away_score > 0 || match.status === 'FT' || match.status === 'AET';
-                const homeIsWinner = hasScore && match.home_score > match.away_score;
-                const awayIsWinner = hasScore && match.away_score > match.home_score;
+                // Filter Tipps für dieses Match
+                const matchTips = allTips.filter(t => t.match_id === match.match_id);
+                
+                let homeBadges = '';
+                let awayBadges = '';
 
-                // Stylische farbliche Unterlegung für den Sieger
-                const homeWinnerStyle = homeIsWinner ? 'bg-bayernRed/15 border border-bayernRed/40 rounded-xl px-2 py-1 shadow' : '';
-                const awayWinnerStyle = awayIsWinner ? 'bg-bayernRed/15 border border-bayernRed/40 rounded-xl px-2 py-1 shadow' : '';
+                matchTips.forEach(tip => {
+                    const cfg = playerColors[tip.player_name] || { bg: 'bg-gray-700', border: 'border-gray-500', text: 'text-white', badge: 'bg-gray-600 text-white' };
+                    const badgeHtml = `<span class="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded ${cfg.badge} shadow">${tip.player_name}</span>`;
+                    
+                    if (tip.tipped_team === match.home_team) {
+                        homeBadges += badgeHtml;
+                    } else if (tip.tipped_team === match.away_team) {
+                        awayBadges += badgeHtml;
+                    }
+                });
 
                 const card = document.createElement('div');
                 card.className = `rounded-xl border ${cardBorder} p-4 shadow-md transition hover:border-gray-700`;
@@ -263,6 +292,9 @@
                     <div class="flex justify-between items-center text-xs text-gray-400 mb-3 border-b border-gray-800/60 pb-2">
                         <span>📅 ${match.date} ${match.time ? '— 🕒 ' + match.time + ' Uhr' : ''}</span>
                         <div class="flex items-center gap-2">
+                            <button onclick="openTipModal('${match.match_id}', '${match.home_team.replace(/'/g, "\\'")}', '${match.away_team.replace(/'/g, "\\'")}')" class="bg-gray-800 hover:bg-bayernRed text-gray-300 hover:text-white px-2.5 py-1 rounded text-xs font-bold transition border border-gray-700 flex items-center gap-1">
+                                🎯 Tipp abgeben (${currentPlayer})
+                            </button>
                             ${isLive ? `
                                 <span class="bg-red-600 text-white px-2 py-0.5 rounded font-black text-[10px] tracking-wider uppercase flex items-center gap-1 shadow-lg animate-pulse">
                                     <span class="w-1.5 h-1.5 rounded-full bg-white"></span> LIVE
@@ -274,12 +306,9 @@
                     <div class="grid grid-cols-7 items-center gap-2">
                         <!-- Heimteam -->
                         <div class="col-span-3 text-right">
-                            <div class="inline-block ${homeWinnerStyle}">
-                                <div class="font-bold text-sm sm:text-base text-white truncate ${match.home_team.includes('Bayern') ? 'text-bayernRed' : ''}">
-                                    ${match.home_team} ${homeIsWinner ? '🏆' : ''}
-                                </div>
-                                <div class="text-[11px] text-gray-400 font-medium">${match.home_league || ''}</div>
-                            </div>
+                            <div class="font-bold text-sm sm:text-base text-white truncate ${match.home_team.includes('Bayern') ? 'text-bayernRed' : ''}">${match.home_team}</div>
+                            <div class="text-[11px] text-gray-400 font-medium">${match.home_league || ''}</div>
+                            <div class="flex flex-wrap justify-end gap-1 mt-1">${homeBadges}</div>
                         </div>
 
                         <!-- Spielstand -->
@@ -291,12 +320,9 @@
 
                         <!-- Auswärtsteam -->
                         <div class="col-span-3 text-left">
-                            <div class="inline-block ${awayWinnerStyle}">
-                                <div class="font-bold text-sm sm:text-base text-white truncate ${match.away_team.includes('Bayern') ? 'text-bayernRed' : ''}">
-                                    ${awayIsWinner ? '🏆 ' : ''}${match.away_team}
-                                </div>
-                                <div class="text-[11px] text-gray-400 font-medium">${match.away_league || ''}</div>
-                            </div>
+                            <div class="font-bold text-sm sm:text-base text-white truncate ${match.away_team.includes('Bayern') ? 'text-bayernRed' : ''}">${match.away_team}</div>
+                            <div class="text-[11px] text-gray-400 font-medium">${match.away_league || ''}</div>
+                            <div class="flex flex-wrap justify-start gap-1 mt-1">${awayBadges}</div>
                         </div>
                     </div>
 
@@ -311,39 +337,74 @@
             });
         }
 
-        function requestAdminAccess() {
-            const password = prompt("Bitte Admin-Passwort eingeben:");
-            if (password === "1919") {
-                toggleAdmin();
-            } else if (password !== null) {
-                alert("Falsches Passwort!");
+        // Tipp Modal
+        function openTipModal(matchId, homeName, awayName) {
+            activeTipMatchId = matchId;
+            activeTipTeams = { home: homeName, away: awayName };
+            document.getElementById('tipModalMatchTitle').innerText = `${homeName} vs ${awayName} (Tipper: ${currentPlayer})`;
+            document.getElementById('tipHomeBtn').innerText = homeName;
+            document.getElementById('tipAwayBtn').innerText = awayName;
+            document.getElementById('tipModal').classList.remove('hidden');
+        }
+
+        function closeTipModal() {
+            document.getElementById('tipModal').classList.add('hidden');
+            activeTipMatchId = null;
+        }
+
+        async function submitTipSelection(type) {
+            if (!activeTipMatchId) return;
+            const chosenTeam = type === 'home' ? activeTipTeams.home : activeTipTeams.away;
+
+            const { error } = await supabaseClient
+                .from('dfb_pokal_tipps')
+                .upsert({ match_id: activeTipMatchId, player_name: currentPlayer, tipped_team: chosenTeam }, { onConflict: 'match_id,player_name' });
+
+            if (error) {
+                alert('Fehler beim Speichern des Tipps: ' + error.message);
+            } else {
+                closeTipModal();
+                init(true); // Neu laden
             }
         }
 
+        async function clearTipForCurrentMatch() {
+            if (!activeTipMatchId) return;
+            const { error } = await supabaseClient
+                .from('dfb_pokal_tipps')
+                .delete()
+                .match({ match_id: activeTipMatchId, player_name: currentPlayer });
+
+            if (!error) {
+                closeTipModal();
+                init(true);
+            }
+        }
+
+        function requestAdminAccess() {
+            const password = prompt("Bitte Admin-Passwort eingeben:");
+            if (password === "1919") toggleAdmin();
+            else if (password !== null) alert("Falsches Passwort!");
+        }
+
         function toggleAdmin() {
-            const modal = document.getElementById('adminModal');
-            modal.classList.toggle('hidden');
+            document.getElementById('adminModal').classList.toggle('hidden');
         }
 
         function renderAdminList() {
             const list = document.getElementById('adminMatchList');
             list.innerHTML = '';
-
             matchesData.forEach((match, index) => {
                 const item = document.createElement('div');
                 item.className = "bg-gray-900 border border-gray-800 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3";
                 item.innerHTML = `
-                    <div class="text-xs text-gray-300 font-medium w-full sm:w-1/3 truncate">
-                        ${match.home_team} vs ${match.away_team}
-                    </div>
+                    <div class="text-xs text-gray-300 font-medium w-full sm:w-1/3 truncate">${match.home_team} vs ${match.away_team}</div>
                     <div class="flex items-center gap-2">
                         <input type="number" id="adm_h_${index}" value="${match.home_score}" class="w-14 bg-black border border-gray-700 text-center rounded px-2 py-1 text-sm text-white font-bold">
                         <span class="text-gray-500">:</span>
                         <input type="number" id="adm_a_${index}" value="${match.away_score}" class="w-14 bg-black border border-gray-700 text-center rounded px-2 py-1 text-sm text-white font-bold">
                     </div>
-                    <div class="w-full sm:w-1/3">
-                        <input type="text" id="adm_s_${index}" value="${match.goal_scorer !== 'EMPTY' ? match.goal_scorer : ''}" placeholder="Torschützen..." class="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs text-white">
-                    </div>
+                    <div class="w-full sm:w-1/3"><input type="text" id="adm_s_${index}" value="${match.goal_scorer !== 'EMPTY' ? match.goal_scorer : ''}" placeholder="Torschützen..." class="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs text-white"></div>
                     <button onclick="saveMatch(${index})" class="bg-bayernRed hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold transition whitespace-nowrap">Speichern</button>
                 `;
                 list.appendChild(item);
@@ -352,41 +413,26 @@
 
         async function saveMatch(index) {
             const match = matchesData[index];
-            const newHomeScore = parseInt(document.getElementById(`adm_h_${index}`).value);
-            const newAwayScore = parseInt(document.getElementById(`adm_a_${index}`).value);
-            const newScorers = document.getElementById(`adm_s_${index}`).value.trim() || 'EMPTY';
-
             const payload = {
                 match_id: match.match_id,
                 matchday: match.matchday,
                 home_team: match.home_team,
                 away_team: match.away_team,
-                home_score: newHomeScore,
-                away_score: newAwayScore,
-                goal_scorer: newScorers
+                home_score: parseInt(document.getElementById(`adm_h_${index}`).value),
+                away_score: parseInt(document.getElementById(`adm_a_${index}`).value),
+                goal_scorer: document.getElementById(`adm_s_${index}`).value.trim() || 'EMPTY'
             };
-
-            const { error } = await supabaseClient
-                .from('dfb_pokal_spiele')
-                .upsert(payload, { onConflict: 'match_id' });
-
-            if (error) {
-                alert('Fehler beim Speichern: ' + error.message);
-            } else {
-                alert('Erfolgreich in Supabase aktualisiert!');
-                init(false);
-            }
+            const { error } = await supabaseClient.from('dfb_pokal_spiele').upsert(payload, { onConflict: 'match_id' });
+            if (error) alert('Fehler: ' + error.message);
+            else { alert('Gespeichert!'); init(false); }
         }
 
-        // Supabase Realtime Kanal abonnieren
-        supabaseClient
-            .channel('public:dfb_pokal_spiele')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'dfb_pokal_spiele' }, payload => {
-                init(true);
-            })
+        // Realtime für Spiele & Tipps
+        supabaseClient.channel('public:dfb_pokal_all')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'dfb_pokal_spiele' }, () => init(true))
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'dfb_pokal_tipps' }, () => init(true))
             .subscribe();
 
-        // App beim Laden initialisieren
         window.onload = () => init(false);
     </script>
 </body>
