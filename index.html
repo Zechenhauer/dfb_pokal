@@ -247,6 +247,15 @@
 
                 const isLive = match.is_live || match.status === 'IN' || (match.home_score > 0 || match.away_score > 0);
 
+                // Bestimmung des Siegers (nur bei Toren ungleich)
+                const hasScore = match.home_score > 0 || match.away_score > 0 || match.status === 'FT' || match.status === 'AET';
+                const homeIsWinner = hasScore && match.home_score > match.away_score;
+                const awayIsWinner = hasScore && match.away_score > match.home_score;
+
+                // Stylische farbliche Unterlegung für den Sieger
+                const homeWinnerStyle = homeIsWinner ? 'bg-bayernRed/15 border border-bayernRed/40 rounded-xl px-2 py-1 shadow' : '';
+                const awayWinnerStyle = awayIsWinner ? 'bg-bayernRed/15 border border-bayernRed/40 rounded-xl px-2 py-1 shadow' : '';
+
                 const card = document.createElement('div');
                 card.className = `rounded-xl border ${cardBorder} p-4 shadow-md transition hover:border-gray-700`;
                 
@@ -265,8 +274,12 @@
                     <div class="grid grid-cols-7 items-center gap-2">
                         <!-- Heimteam -->
                         <div class="col-span-3 text-right">
-                            <div class="font-bold text-sm sm:text-base text-white truncate ${match.home_team.includes('Bayern') ? 'text-bayernRed' : ''}">${match.home_team}</div>
-                            <div class="text-[11px] text-gray-400 font-medium">${match.home_league || ''}</div>
+                            <div class="inline-block ${homeWinnerStyle}">
+                                <div class="font-bold text-sm sm:text-base text-white truncate ${match.home_team.includes('Bayern') ? 'text-bayernRed' : ''}">
+                                    ${match.home_team} ${homeIsWinner ? '🏆' : ''}
+                                </div>
+                                <div class="text-[11px] text-gray-400 font-medium">${match.home_league || ''}</div>
+                            </div>
                         </div>
 
                         <!-- Spielstand -->
@@ -278,8 +291,12 @@
 
                         <!-- Auswärtsteam -->
                         <div class="col-span-3 text-left">
-                            <div class="font-bold text-sm sm:text-base text-white truncate ${match.away_team.includes('Bayern') ? 'text-bayernRed' : ''}">${match.away_team}</div>
-                            <div class="text-[11px] text-gray-400 font-medium">${match.away_league || ''}</div>
+                            <div class="inline-block ${awayWinnerStyle}">
+                                <div class="font-bold text-sm sm:text-base text-white truncate ${match.away_team.includes('Bayern') ? 'text-bayernRed' : ''}">
+                                    ${awayIsWinner ? '🏆 ' : ''}${match.away_team}
+                                </div>
+                                <div class="text-[11px] text-gray-400 font-medium">${match.away_league || ''}</div>
+                            </div>
                         </div>
                     </div>
 
