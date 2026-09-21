@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DFB-Pokal 2026/27 – Live-Center</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bayernRed: '#dc052d',
+                        bayernDark: '#0b0f19',
+                        bayernCard: '#131b2e',
+                        bayernHover: '#1d2946'
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-bayernDark text-white min-h-screen font-sans antialiased">
+
+    <!-- Header -->
+    <header class="bg-bayernCard border-b border-gray-800 sticky top-0 z-50 shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-full bg-bayernRed flex items-center justify-center font-bold text-xl shadow-md border-2 border-white/20">
+                    🏆
+                </div>
+                <div>
+                    <h1 class="text-xl font-black tracking-wider uppercase text-white">DFB-Pokal <span class="text-bayernRed">2026/27</span></h1>
+                    <p class="text-xs text-gray-400">⚡ Web-App & Management: Jürgen Schützendorf</p>
+                </div>
+            </div>
+
+            <!-- Runden-Navigation -->
+            <div class="flex flex-wrap gap-1.5 justify-center bg-black/30 p-1.5 rounded-xl border border-gray-800" id="roundNav">
+                <button onclick="changeRound(2)" class="round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-bayernRed text-white shadow" data-round="2">2. Hauptrunde</button>
+                <button onclick="changeRound(3)" class="round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition text-gray-400 hover:text-white hover:bg-bayernHover" data-round="3">Achtelfinale</button>
+                <button onclick="changeRound(4)" class="round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition text-gray-400 hover:text-white hover:bg-bayernHover" data-round="4">Viertelfinale</button>
+                <button onclick="changeRound(5)" class="round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition text-gray-400 hover:text-white hover:bg-bayernHover" data-round="5">Halbfinale</button>
+                <button onclick="changeRound(6)" class="round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition text-gray-400 hover:text-white hover:bg-bayernHover" data-round="6">Finale</button>
+            </div>
+
+            <!-- Admin Toggle -->
+            <div>
+                <button onclick="toggleAdmin()" id="adminToggleBtn" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-3 py-1.5 rounded-lg text-xs font-medium transition border border-gray-700 flex items-center gap-1.5">
+                    ⚙️ Admin-Modus
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-5xl mx-auto px-4 py-8">
+        
+        <!-- Runden-Titel -->
+        <div class="mb-6 text-center">
+            <h2 id="currentRoundTitle" class="text-2xl font-black tracking-wide text-bayernRed">2. Hauptrunde</h2>
+            <p class="text-xs text-gray-400 mt-1">Alle Begegnungen und Live-Spielstände im Überblick (Auto-Sync im Live-Modus)</p>
+        </div>
+
+        <!-- Lade-Indikator -->
+        <div id="loading" class="text-center py-20">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-bayernRed border-t-transparent"></div>
+            <p class="text-gray-400 text-sm mt-3">Lade Pokal-Spiele...</p>
+        </div>
+
+        <!-- Spiele Container -->
+        <div id="matchesContainer" class="space-y-4 hidden">
+            <!-- Wird dynamisch gefüllt -->
+        </div>
+
+    </main>
+
+    <!-- Admin Modal -->
+    <div id="adminModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-bayernCard border border-gray-700 w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden">
+            <div class="bg-gray-900 px-6 py-4 flex justify-between items-center border-b border-gray-800">
+                <h3 class="font-bold text-lg text-white">⚙️ Admin-Bereich: Manuelle Spielpflege</h3>
+                <button onclick="toggleAdmin()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+            <div class="p-6 max-h-[80vh] overflow-y-auto space-y-4">
+                <p class="text-xs text-gray-400">Wähle eine Partie aus, um den Spielstand oder Torschützen manuell zu korrigieren. Die Änderung wird sofort in Supabase gespeichert.</p>
+                
+                <div id="adminMatchList" class="space-y-3">
+                    <!-- Dynamische Admin-Einträge -->
+                </div>
+            </div>
+            <div class="bg-gray-900 px-6 py-3 border-t border-gray-800 text-right">
+                <button onclick="toggleAdmin()" class="bg-bayernRed hover:bg-red-700 text-white px-4 py-2 rounded-lg text-xs font-bold transition">Schließen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript Logik -->
+    <script>
+        // Supabase Konfiguration
+        const SUPABASE_URL = "https://lhusylpjnujlqomougmg.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_yXEueWILvAq-Vm2VfTuYyg_BIQeE1KK";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let currentRound = 2;
+        let matchesData = [];
+        let smartPollInterval = null;
+
+        // Vordefinierter Spielplan für die 2. Hauptrunde
+        const initialRound2Matches = [
+            { id: "pokal_2_sg-sonnenhof-grossaspach_vs_fc-augsburg", home: "SG Sonnenhof Großaspach", away: "FC Augsburg", homeLeague: "Regionalliga Nord", awayLeague: "Bundesliga", date: "27.10.2026", time: "18:00" },
+            { id: "pokal_2_rot-weiss-essen_vs_rb-leipzig", home: "Rot-Weiss Essen", away: "RB Leipzig", homeLeague: "3. Liga", awayLeague: "Bundesliga", date: "27.10.2026", time: "18:00" },
+            { id: "pokal_2_vfl-bochum_vs_1-fsv-mainz-05", home: "VfL Bochum 1848", away: "1. FSV Mainz 05", homeLeague: "2. Bundesliga", awayLeague: "Bundesliga", date: "27.10.2026", time: "18:00" },
+            { id: "pokal_2_hamburg-sv_vs_eintracht-frankfurt", home: "Hamburger SV", away: "Eintracht Frankfurt", homeLeague: "Bundesliga", awayLeague: "Bundesliga", date: "27.10.2026", time: "18:00" },
+            { id: "pokal_2_1-fc-koln_vs_1-fc-union-berlin", home: "1. FC Köln", away: "1. FC Union Berlin", homeLeague: "Bundesliga", awayLeague: "Bundesliga", date: "27.10.2026", time: "20:45" },
+            { id: "pokal_2_borussia-dortmund_vs_werder-bremen", home: "Borussia Dortmund", away: "Werder Bremen", homeLeague: "Bundesliga", awayLeague: "Bundesliga", date: "27.10.2026", time: "20:45" },
+            { id: "pokal_2_borussia-monchengladbach_vs_karlsruher-sc", home: "Borussia Mönchengladbach", away: "Karlsruher SC", homeLeague: "Bundesliga", awayLeague: "2. Bundesliga", date: "27.10.2026", time: "20:45" },
+            { id: "pokal_2_sv-elversberg_vs_sv-darmstadt-98", home: "SV Elversberg", away: "SV Darmstadt 98", homeLeague: "Bundesliga", awayLeague: "2. Bundesliga", date: "27.10.2026", time: "20:45" },
+            { id: "pokal_2_ssv-jeddeloh-ii_vs_hertha-bsc", home: "SSV Jeddeloh II", away: "Hertha BSC", homeLeague: "Regionalliga Nord", awayLeague: "2. Bundesliga", date: "28.10.2026", time: "18:00" },
+            { id: "pokal_2_dynamo-dresden_vs_fc-schalke-04", home: "SG Dynamo Dresden", away: "FC Schalke 04", homeLeague: "2. Bundesliga", awayLeague: "Bundesliga", date: "28.10.2026", time: "18:00" },
+            { id: "pokal_2_sc-paderborn-07_vs_vfb-stuttgart", home: "SC Paderborn 07", away: "VfB Stuttgart", homeLeague: "Bundesliga", awayLeague: "Bundesliga", date: "28.10.2026", time: "18:00" },
+            { id: "pokal_2_sc-freiburg_vs_vfl-wolfsburg", home: "Sport-Club Freiburg", away: "VfL Wolfsburg", homeLeague: "Bundesliga", awayLeague: "2. Bundesliga", date: "28.10.2026", time: "18:00" },
+            { id: "pokal_2_holstein-kiel_vs_tsg-hoffenheim", home: "Holstein Kiel", away: "TSG Hoffenheim", homeLeague: "2. Bundesliga", awayLeague: "Bundesliga", date: "28.10.2026", time: "20:45" },
+            { id: "pokal_2_bayer-04-leverkusen_vs_1-fc-nurnberg", home: "Bayer 04 Leverkusen", away: "1. FC Nürnberg", homeLeague: "Bundesliga", awayLeague: "2. Bundesliga", date: "28.10.2026", time: "20:45" },
+            { id: "pokal_2_hannover-96_vs_1-fc-kaiserslautern", home: "Hannover 96", away: "1. FC Kaiserslautern", homeLeague: "2. Bundesliga", awayLeague: "2. Bundesliga", date: "28.10.2026", time: "20:45" },
+            { id: "pokal_2_fc-bayern-munchen_vs_1-fc-magdeburg", home: "FC Bayern München", away: "1. FC Magdeburg", homeLeague: "Bundesliga", awayLeague: "2. Bundesliga", date: "28.10.2026", time: "20:45" }
+        ];
+
+        const roundNames = {
+            2: "2. Hauptrunde",
+            3: "Achtelfinale",
+            4: "Viertelfinale",
+            5: "Halbfinale",
+            6: "Finale"
+        };
+
+        async function init(isBackground = false) {
+            if (!isBackground) {
+                document.getElementById('loading').classList.remove('hidden');
+                document.getElementById('matchesContainer').classList.add('hidden');
+            }
+
+            const { data, error } = await supabaseClient
+                .from('dfb_pokal_spiele')
+                .select('*')
+                .eq('matchday', currentRound);
+
+            if (error) {
+                console.error('Fehler beim Laden:', error);
+            }
+
+            let baseMatches = currentRound === 2 ? initialRound2Matches : [];
+            
+            matchesData = baseMatches.map(bm => {
+                const dbMatch = data ? data.find(d => d.match_id === bm.id) : null;
+                return {
+                    match_id: bm.id,
+                    matchday: currentRound,
+                    home_team: bm.home,
+                    away_team: bm.away,
+                    home_league: bm.homeLeague,
+                    away_league: bm.awayLeague,
+                    home_score: dbMatch ? dbMatch.home_score : 0,
+                    away_score: dbMatch ? dbMatch.away_score : 0,
+                    goal_scorer: dbMatch ? dbMatch.goal_scorer : 'EMPTY',
+                    date: bm.date || 'TBD',
+                    time: bm.time || '20:45',
+                    is_live: dbMatch ? dbMatch.is_live : false,
+                    status: dbMatch ? dbMatch.status : ''
+                };
+            });
+
+            if (data) {
+                data.forEach(dm => {
+                    if (!matchesData.some(m => m.match_id === dm.match_id)) {
+                        matchesData.push({
+                            match_id: dm.match_id,
+                            matchday: dm.matchday,
+                            home_team: dm.home_team,
+                            away_team: dm.away_team,
+                            home_league: "Unbekannt",
+                            away_league: "Unbekannt",
+                            home_score: dm.home_score,
+                            away_score: dm.away_score,
+                            goal_scorer: dm.goal_scorer,
+                            date: "Live",
+                            time: "",
+                            is_live: true,
+                            status: 'IN'
+                        });
+                    }
+                });
+            }
+
+            renderMatches();
+            renderAdminList();
+            checkAndManagePolling();
+
+            if (!isBackground) {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('matchesContainer').classList.remove('hidden');
+            }
+        }
+
+        function checkAndManagePolling() {
+            const hasLiveGames = matchesData.some(m => m.is_live || m.status === 'IN' || (m.home_score > 0 || m.away_score > 0));
+
+            if (hasLiveGames && !smartPollInterval) {
+                smartPollInterval = setInterval(() => {
+                    init(true);
+                }, 30000);
+            } else if (!hasLiveGames && smartPollInterval) {
+                clearInterval(smartPollInterval);
+                smartPollInterval = null;
+            }
+        }
+
+        function changeRound(round) {
+            currentRound = round;
+            document.querySelectorAll('.round-btn').forEach(btn => {
+                if (parseInt(btn.dataset.round) === round) {
+                    btn.className = "round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-bayernRed text-white shadow";
+                } else {
+                    btn.className = "round-btn px-3 py-1.5 rounded-lg text-xs font-semibold transition text-gray-400 hover:text-white hover:bg-bayernHover";
+                }
+            });
+            document.getElementById('currentRoundTitle').innerText = roundNames[round];
+            init(false);
+        }
+
+        function renderMatches() {
+            const container = document.getElementById('matchesContainer');
+            container.innerHTML = '';
+
+            if (matchesData.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-gray-400 bg-bayernCard rounded-xl border border-gray-800">Für diese Runde sind noch keine Paarungen eingetragen.</div>`;
+                return;
+            }
+
+            matchesData.forEach(match => {
+                const isBayern = match.home_team.includes('Bayern') || match.away_team.includes('Bayern');
+                const cardBorder = isBayern ? 'border-bayernRed/50 bg-gradient-to-r from-bayernCard via-bayernCard to-red-950/20' : 'border-gray-800 bg-bayernCard';
+                const scorersText = match.goal_scorer && match.goal_scorer !== 'EMPTY' ? match.goal_scorer : '';
+
+                const isLive = match.is_live || match.status === 'IN' || (match.home_score > 0 || match.away_score > 0);
+
+                const card = document.createElement('div');
+                card.className = `rounded-xl border ${cardBorder} p-4 shadow-md transition hover:border-gray-700`;
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-center text-xs text-gray-400 mb-3 border-b border-gray-800/60 pb-2">
+                        <span>📅 ${match.date} ${match.time ? '— 🕒 ' + match.time + ' Uhr' : ''}</span>
+                        <div class="flex items-center gap-2">
+                            ${isLive ? `
+                                <span class="bg-red-600 text-white px-2 py-0.5 rounded font-black text-[10px] tracking-wider uppercase flex items-center gap-1 shadow-lg animate-pulse">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-white"></span> LIVE
+                                </span>
+                            ` : ''}
+                            ${isBayern ? '<span class="bg-bayernRed/20 text-bayernRed px-2 py-0.5 rounded font-bold text-[10px] tracking-wider uppercase border border-bayernRed/30">🔴 FC Bayern Spiel</span>' : ''}
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 items-center gap-2">
+                        <!-- Heimteam -->
+                        <div class="col-span-3 text-right">
+                            <div class="font-bold text-sm sm:text-base text-white truncate ${match.home_team.includes('Bayern') ? 'text-bayernRed' : ''}">${match.home_team}</div>
+                            <div class="text-[11px] text-gray-400 font-medium">${match.home_league || ''}</div>
+                        </div>
+
+                        <!-- Spielstand -->
+                        <div class="col-span-1 text-center">
+                            <div class="bg-black/40 border border-gray-800 rounded-lg py-1.5 px-1 font-black text-base sm:text-lg tracking-widest text-white shadow-inner">
+                                ${match.home_score} : ${match.away_score}
+                            </div>
+                        </div>
+
+                        <!-- Auswärtsteam -->
+                        <div class="col-span-3 text-left">
+                            <div class="font-bold text-sm sm:text-base text-white truncate ${match.away_team.includes('Bayern') ? 'text-bayernRed' : ''}">${match.away_team}</div>
+                            <div class="text-[11px] text-gray-400 font-medium">${match.away_league || ''}</div>
+                        </div>
+                    </div>
+
+                    ${scorersText ? `
+                        <div class="mt-3 pt-2 border-t border-gray-800/60 text-xs text-gray-300 flex items-start gap-1.5">
+                            <span class="text-bayernRed font-bold">⚽ Torschützen:</span>
+                            <span class="italic text-gray-200">${scorersText}</span>
+                        </div>
+                    ` : ''}
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function toggleAdmin() {
+            const modal = document.getElementById('adminModal');
+            modal.classList.toggle('hidden');
+        }
+
+        function renderAdminList() {
+            const list = document.getElementById('adminMatchList');
+            list.innerHTML = '';
+
+            matchesData.forEach((match, index) => {
+                const item = document.createElement('div');
+                item.className = "bg-gray-900 border border-gray-800 p-3 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3";
+                item.innerHTML = `
+                    <div class="text-xs text-gray-300 font-medium w-full sm:w-1/3 truncate">
+                        ${match.home_team} vs ${match.away_team}
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <input type="number" id="adm_h_${index}" value="${match.home_score}" class="w-14 bg-black border border-gray-700 text-center rounded px-2 py-1 text-sm text-white font-bold">
+                        <span class="text-gray-500">:</span>
+                        <input type="number" id="adm_a_${index}" value="${match.away_score}" class="w-14 bg-black border border-gray-700 text-center rounded px-2 py-1 text-sm text-white font-bold">
+                    </div>
+                    <div class="w-full sm:w-1/3">
+                        <input type="text" id="adm_s_${index}" value="${match.goal_scorer !== 'EMPTY' ? match.goal_scorer : ''}" placeholder="Torschützen..." class="w-full bg-black border border-gray-700 rounded px-2 py-1 text-xs text-white">
+                    </div>
+                    <button onclick="saveMatch(${index})" class="bg-bayernRed hover:bg-red-700 text-white px-3 py-1.5 rounded text-xs font-bold transition whitespace-nowrap">Speichern</button>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        async function saveMatch(index) {
+            const match = matchesData[index];
+            const newHomeScore = parseInt(document.getElementById(`adm_h_${index}`).value);
+            const newAwayScore = parseInt(document.getElementById(`adm_a_${index}`).value);
+            const newScorers = document.getElementById(`adm_s_${index}`).value.trim() || 'EMPTY';
+
+            const payload = {
+                match_id: match.match_id,
+                matchday: match.matchday,
+                home_team: match.home_team,
+                away_team: match.away_team,
+                home_score: newHomeScore,
+                away_score: newAwayScore,
+                goal_scorer: newScorers
+            };
+
+            const { error } = await supabaseClient
+                .from('dfb_pokal_spiele')
+                .upsert(payload, { onConflict: 'match_id' });
+
+            if (error) {
+                alert('Fehler beim Speichern: ' + error.message);
+            } else {
+                alert('Erfolgreich in Supabase aktualisiert!');
+                init(false);
+            }
+        }
+
+        // Supabase Realtime Kanal abonnieren
+        supabaseClient
+            .channel('public:dfb_pokal_spiele')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'dfb_pokal_spiele' }, payload => {
+                init(true);
+            })
+            .subscribe();
+
+        // App beim Laden initialisieren
+        window.onload = () => init(false);
+    </script>
+</body>
+</html>
